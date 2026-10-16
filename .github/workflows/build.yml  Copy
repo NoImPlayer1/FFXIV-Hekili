@@ -1,0 +1,76 @@
+name: Build HekiliReborn Prototype
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build:
+    name: Build on Windows
+    runs-on: windows-latest
+    permissions:
+      contents: read
+
+    steps:
+      - name: Get our patch files
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: '3.13'
+
+      - name: Set up .NET 10
+        uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Download upstream RotationSolverReborn
+        shell: pwsh
+        run: |
+          git clone --depth 1 --recurse-submodules https://github.com/FFXIV-CombatReborn/RotationSolverReborn.git RSR
+          if ($LASTEXITCODE -ne 0) { throw 'RSR clone failed' }
+
+      - name: Obtain Dalamud development libraries
+        shell: pwsh
+        run: |
+          $dest = Join-Path $env:APPDATA 'XIVLauncher\addon\Hooks\dev'
+          New-Item -ItemType Directory -Force -Path $dest | Out-Null
+          Invoke-WebRequest -Uri 'https://goatcorp.github.io/dalamud-distrib/latest.zip' -OutFile "$env:RUNNER_TEMP\dalamud-latest.zip"
+          Expand-Archive -Path "$env:RUNNER_TEMP\dalamud-latest.zip" -DestinationPath $dest -Force
+          if (!(Test-Path (Join-Path $dest 'Dalamud.Common.dll'))) { throw 'Dalamud.Common.dll not found' }
+
+      - name: Apply our experimental patch
+        shell: pwsh
+        run: |
+          python apply_to_rsr.py RSR
+          if ($LASTEXITCODE -ne 0) { throw 'Patch failed: upstream may have changed' }
+
+      - name: Compile with the RSR build system
+        shell: pwsh
+        run: |
+          dotnet restore RSR/RotationSolver/RotationSolver.csproj
+          if ($LASTEXITCODE -ne 0) { throw 'Package restore failed' }
+          dotnet build RSR/RotationSolver/RotationSolver.csproj --no-restore --configuration Release -p:Platform=x64 --output "$env:GITHUB_WORKSPACE\build"
+          if ($LASTEXITCODE -ne 0) { throw 'Compilation failed' }
+
+      - name: Prepare downloadable files
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path output | Out-Null
+          $package = 'build/RotationSolver/latest.zip'
+          if (Test-Path $package) {
+            Expand-Archive -Path $package -DestinationPath output -Force
+          } else {
+            $dll = Get-ChildItem -Path build -Filter RotationSolver.dll -Recurse | Select-Object -First 1
+            if (!$dll) { throw 'Neither a package nor RotationSolver.dll was produced' }
+            Copy-Item -Path (Join-Path $dll.DirectoryName '*') -Destination output -Recurse -Force
+          }
+          Get-ChildItem -Path output -Recurse | Select-Object FullName
+
+      - name: Save build output as downloadable ZIP
+        uses: actions/upload-artifact@v4
+        with:
+          name: HekiliReborn-Prototype-Build
+          path: output/
+          if-no-files-found: error
+          retention-days: 7
