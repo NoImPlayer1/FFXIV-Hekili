@@ -29,8 +29,7 @@ changes = {
          'windowSystem.AddWindow(_nextActionWindow);\n\t\twindowSystem.AddWindow(_hekiliAdvisorWindow);'),
         ('_nextActionWindow!.IsOpen = isValid && Service.Config.ShowNextActionWindow;',
          '_nextActionWindow!.IsOpen = false; // Replaced by Hekili advisor overlay.\n'
-         '\t\t_hekiliAdvisorWindow!.IsOpen = isValid && Service.Config.ShowNextActionWindow;'),
-    ],
+        '\t\t_hekiliAdvisorWindow!.IsOpen = MajorUpdater.IsValid;'),    ],
     major: [
         ('if (canDoAction)\n\t\t{',
          'if (canDoAction && !RotationSolver.UI.ExtraWindows.HekiliAdvisorMode.GuidanceOnly)\n\t\t{'),
